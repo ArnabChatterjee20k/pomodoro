@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTimerContext } from "@/context/TimerContextProvider";
 import { formatTime } from "@/lib/utils";
 import { Button } from "./ui/button";
@@ -28,18 +28,18 @@ interface TabContentProps {
   id: string;
   selected: string;
   content: number;
-  previousTime: number;
 }
 
 const TabContent = ({
   id,
   selected,
   content,
-  previousTime,
 }: TabContentProps) => {
-  const [play, setPlay] = useState(false);
   if (selected !== id) return;
-  const Icon = play ? Pause : Play;
+
+  const { countdown, startTimer, resetTimer, pauseTimer, running } =
+    useTimer(content);
+  const Icon = running ? Pause : Play;
 
   return (
     <TabsContent value={id} className="p-10 font-protest space-y-5">
@@ -67,15 +67,21 @@ const TabContent = ({
               transition: { duration: 0.3 }, // Shorter exit to avoid splash effect
             }}
           >
-            <h4 className="text-8xl font-extrabold">{formatTime(content)}</h4>
+            <h4 className="text-8xl font-extrabold">{formatTime(countdown)}</h4>
           </motion.div>
         )}
       </AnimatePresence>
       <div className="flex gap-2">
-        <Button className="w-full" onClick={() => setPlay((p) => !p)}>
+        <Button
+          className="w-full"
+          onClick={() => {
+            if (running) pauseTimer();
+            else startTimer();
+          }}
+        >
           <Icon />
         </Button>
-        <Button variant="destructive">
+        <Button variant="destructive" onClick={resetTimer}>
           <TimerReset />
         </Button>
       </div>
@@ -99,14 +105,8 @@ export function Timer() {
   ];
 
   const [selected, setSelected] = useState(tabData[0].id);
-  const [prevTabTime, setPrevTabTime] = useState(0);
 
   function handleTabSelection(id: string) {
-    const prevTabId = selected;
-    const prevTab = tabData.find((tab) => tab.id === prevTabId);
-    if (prevTab) {
-      setPrevTabTime(prevTab.time);
-    }
     setSelected(id);
   }
 
@@ -129,9 +129,32 @@ export function Timer() {
           key={tab.id}
           id={tab.id}
           selected={selected}
-          previousTime={prevTabTime}
         />
       ))}
     </Tabs>
   );
+}
+
+function useTimer(initialTime: number) {
+  const [time, setTime] = useState(initialTime);
+  const [running, setRunning] = useState(false);
+
+  const startTimer = useCallback(() => setRunning(true), []);
+  const pauseTimer = useCallback(() => setRunning(false), []);
+  const resetTimer = useCallback(() => {
+    setRunning(false);
+    setTime(time);
+  }, [initialTime]);
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (running) {
+      timer = setInterval(() => {
+        setTime((prevTime) => prevTime - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [running]);
+
+  return { countdown: time, startTimer, pauseTimer, resetTimer, running };
 }
