@@ -7,17 +7,17 @@ import {
 } from "framer-motion";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCallback, useEffect, useState } from "react";
-import { useTimerContext } from "@/context/TimerContextProvider";
 import { formatTime } from "@/lib/utils";
 
 import { Button } from "./ui/button";
 import { Play, Pause, TimerReset } from "lucide-react";
+import { ITimer, useTimeStore } from "@/store/TimeStore";
 
 interface TabButtonProps {
-  id: string;
+  id: keyof ITimer;
   selected: string;
   label: string;
-  onClick: (id: string) => any;
+  onClick: (id: keyof ITimer) => any;
 }
 
 const TabButton = ({ id, label, selected, onClick }: TabButtonProps) => (
@@ -39,14 +39,16 @@ const height = fontSize + padding;
 interface TabContentProps {
   id: string;
   selected: string;
-  content: number;
+  target: keyof ITimer;
 }
 
-const TabContent = ({ id, selected, content }: TabContentProps) => {
+const TabContent = ({ id, selected, target }: TabContentProps) => {
   if (selected !== id) return null;
-
-  const { countdown, startTimer, resetTimer, pauseTimer, running } =
-    useTimer(content);
+  const store = useTimeStore();
+  const content = store[target];
+  const { countdown, startTimer, resetTimer, pauseTimer } = useTimer(target);
+  const { isRunning } = useTimeStore();
+  const running = isRunning[target];
   const Icon = running ? Pause : Play;
 
   return (
@@ -150,7 +152,7 @@ function Number({ mv, number }: { mv: MotionValue; number: number }) {
   let y = useTransform(mv, (latest) => {
     let placeValue = latest % 10;
     let offset = (10 + number - placeValue) % 10;
-    let memo = offset * height; // scrolling 
+    let memo = offset * height; // scrolling
 
     if (offset > 5) {
       memo -= 10 * height;
@@ -177,15 +179,13 @@ const Overlay = () => (
 );
 
 export function Timer() {
-  const { interval, breakTime } = useTimerContext();
-  const tabData = [
-    { id: "interval", label: "Interval", time: interval },
-    { id: "break", label: "Break", time: breakTime },
+  const tabData: { id: keyof ITimer; label: string }[] = [
+    { id: "interval", label: "Interval" },
+    { id: "breakTime", label: "Break" },
   ];
 
   const [selected, setSelected] = useState(tabData[0].id);
-
-  function handleTabSelection(id: string) {
+  function handleTabSelection(id: keyof ITimer) {
     setSelected(id);
   }
 
@@ -204,9 +204,9 @@ export function Timer() {
       </TabsList>
       {tabData.map((tab) => (
         <TabContent
-          content={tab.time}
           key={tab.id}
           id={tab.id}
+          target={tab.id}
           selected={selected}
         />
       ))}
@@ -214,30 +214,22 @@ export function Timer() {
   );
 }
 
-function useTimer(initialTime: number) {
-  const [time, setTime] = useState(initialTime);
-  const [running, setRunning] = useState(false);
+function useTimer(target: keyof ITimer) {
+  // Access store actions and state
+  const { startTimer, pauseTimer, resetTimer, isRunning, setter } = useTimeStore();
+  
+  // Get the current time for the target
+  const time = useTimeStore((state) => state[target]);
+  
+  // Memoized callbacks to start, pause, and reset timers
+  const handleStartTimer = useCallback(() => startTimer(target), [startTimer, target]);
+  const handlePauseTimer = useCallback(() => pauseTimer(target), [pauseTimer, target]);
+  const handleResetTimer = useCallback(() => resetTimer(target), [resetTimer, target]);
 
-  const startTimer = useCallback(() => setRunning(true), []);
-  const pauseTimer = useCallback(() => setRunning(false), []);
-  const resetTimer = useCallback(() => {
-    setRunning(false);
-    setTime(time);
-  }, [initialTime]);
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (running) {
-      timer = setInterval(() => {
-        setTime((prevTime) => {
-          if (prevTime > 0) return prevTime - 1;
-          resetTimer();
-          return 0;
-        });
-      }, 1000);
-    }
-    return () => clearInterval(timer);
-  }, [running]);
-
-  return { countdown: time, startTimer, pauseTimer, resetTimer, running };
+  return {
+    countdown: time,
+    startTimer: handleStartTimer,
+    pauseTimer: handlePauseTimer,
+    resetTimer: handleResetTimer,
+  };
 }
