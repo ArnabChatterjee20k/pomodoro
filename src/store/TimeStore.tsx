@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 export interface ITimer {
   interval: number;
@@ -16,93 +17,100 @@ interface IStore extends ITimer {
 }
 
 type SetterFunction = (prevValue: number) => number;
+const localdata = localStorage.getItem("TimeStore");
+const storage = localdata ? JSON.parse(localdata) : {};
 
 export const defaultTimer: ITimer = {
-  interval: 60 * 60, // 1 hour
-  breakTime: 25 * 60, // 25 minutes
+  interval: storage["state"]["interval"] || 60 * 60, // 1 hour
+  breakTime: storage["state"]["breakTime"] || 25 * 60, // 25 minutes
 };
 
 export const useTimeStore = create<IStore>()(
   devtools(
-    (set, get) => {
-      let intervalIds: Partial<Record<keyof ITimer, NodeJS.Timeout>> = {};
+    persist(
+      (set, get) => {
+        let intervalIds: Partial<Record<keyof ITimer, NodeJS.Timeout>> = {};
 
-      return {
-        ...defaultTimer,
-        isRunning: { interval: false, breakTime: false },
+        return {
+          ...defaultTimer,
+          isRunning: { interval: false, breakTime: false },
 
-        setter: (target: keyof ITimer, value: number | SetterFunction) =>
-          set((state) => {
-            const currentValue = state[target];
-            const newValue =
-              typeof value === "function"
-                ? (value as SetterFunction)(currentValue)
-                : value;
+          setter: (target: keyof ITimer, value: number | SetterFunction) =>
+            set((state) => {
+              const currentValue = state[target];
+              const newValue =
+                typeof value === "function"
+                  ? (value as SetterFunction)(currentValue)
+                  : value;
 
-            return {
+              return {
+                ...state,
+                [target]: newValue,
+              };
+            }),
+
+          reset: (target: keyof ITimer) =>
+            set((state) => ({
               ...state,
-              [target]: newValue,
-            };
-          }),
+              [target]: defaultTimer[target],
+            })),
 
-        reset: (target: keyof ITimer) =>
-          set((state) => ({
-            ...state,
-            [target]: defaultTimer[target],
-          })),
+          startTimer: (target: keyof ITimer) => {
+            const isRunning = get().isRunning[target];
+            if (!isRunning) {
+              Object.entries(intervalIds).map(([targetKey, intervalId]) => {
+                if (target !== targetKey)
+                  get().pauseTimer(targetKey as keyof ITimer);
+              });
+              set((state) => ({
+                ...state,
+                isRunning: {
+                  ...state.isRunning,
+                  [target]: true,
+                },
+              }));
 
-        startTimer: (target: keyof ITimer) => {
-          const isRunning = get().isRunning[target];
-          if (!isRunning) {
-            Object.entries(intervalIds).map(([targetKey, intervalId]) => {
-              if (target !== targetKey) get().pauseTimer(targetKey as keyof ITimer);
-            });
+              const intervalId = setInterval(() => {
+                get().setter(target, (prevValue) => {
+                  if (prevValue > 0) return prevValue - 1;
+                  get().pauseTimer(target);
+                  return 0;
+                });
+              }, 1000);
+
+              intervalIds[target] = intervalId;
+            }
+          },
+
+          pauseTimer: (target: keyof ITimer) => {
+            if (intervalIds[target]) {
+              clearInterval(intervalIds[target]!);
+              delete intervalIds[target];
+            }
+
             set((state) => ({
               ...state,
               isRunning: {
                 ...state.isRunning,
-                [target]: true,
+                [target]: false,
               },
             }));
+          },
 
-            const intervalId = setInterval(() => {
-              get().setter(target, (prevValue) => {
-                if (prevValue > 0) return prevValue - 1;
-                get().pauseTimer(target);
-                return 0;
-              });
-            }, 1000);
-
-            intervalIds[target] = intervalId;
-          }
-        },
-
-        pauseTimer: (target: keyof ITimer) => {
-          if (intervalIds[target]) {
-            clearInterval(intervalIds[target]!);
-            delete intervalIds[target];
-          }
-
-          set((state) => ({
-            ...state,
-            isRunning: {
-              ...state.isRunning,
-              [target]: false,
-            },
-          }));
-        },
-
-        resetTimer: (target: keyof ITimer) => {
-          get().pauseTimer(target);
-          set((state) => ({
-            ...state,
-            [target]: defaultTimer[target],
-          }));
-        },
-      };
-    },
-    {
-      name: "TimeStore",
-    }
+          resetTimer: (target: keyof ITimer) => {
+            get().pauseTimer(target);
+            const storage = JSON.parse(localStorage.getItem("TimeStore") || "");
+            set((state) => ({
+              ...state,
+              [target]: defaultTimer[target],
+              ...storage.state,
+            }));
+          },
+        };
+      },
+      {
+        name: "TimeStore",
+      }
+    )
   )
 );

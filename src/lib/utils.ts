@@ -17,3 +17,31 @@ export function formatTime(seconds: number) {
     seconds: remainingSeconds.toString().padStart(2, "0"),
   };
 }
+
+export function enableWebNotifications() {
+  if (!("Notification" in window)) {
+    console.error("This browser does not support desktop notifications.");
+    return;
+  }
+
+  if (Notification.permission === "granted") {
+    showNotification("Hello! Notifications are already enabled.");
+  } else if (Notification.permission !== "denied") {
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        showNotification("Web Notifications enabled successfully!");
+      } else {
+        console.log("User denied notification permission.");
+      }
+    });
+  }
+}
+function showNotification(message) {
+  const notification = new Notification("Notification", {
+    body: message,
+  });
+
+  notification.onclick = () => {
+    window.focus(); // Bring the window to the front
+  };
+}
