@@ -10,13 +10,14 @@ import {
 } from "@/components/ui/dialog";
 import { Slider } from "./ui/slider";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Clock, Coffee, Bell } from "lucide-react";
 import { useTimeStore } from "@/store/TimeStore";
 import { Button } from "./ui/button";
+import { enableWebNotifications } from "@/lib/utils";
 
 export default function Settings() {
   const [open, setOpen] = useState(false);
@@ -44,8 +45,14 @@ export default function Settings() {
 }
 
 function WorkSessionTimer() {
-  const [notifications, setNotifications] = useState(false);
-  const { interval, breakTime, setter } = useTimeStore();
+  const [notifications, setNotifications] = useState(
+    Notification.permission === "granted"
+  );
+  const { defaultBreakTime, defaultInterval, setter } = useTimeStore();
+
+  useEffect(() => {
+    setNotifications(Notification.permission === "granted");
+  }, []);
 
   return (
     <div className="space-y-6 px-2 py-6">
@@ -60,16 +67,20 @@ function WorkSessionTimer() {
           <Slider
             id="deep-work"
             min={1}
-            max={120}
+            max={120} // max 120 minutes
             step={1}
-            value={[interval / 60]}
-            onValueChange={(value) => setter("interval", value[0] * 60)}
+            value={[defaultInterval / 60]}
+            onValueChange={(value) => setter("defaultInterval", value[0] * 60)}
             className="flex-grow"
           />
+
           <Input
             type="number"
-            value={interval}
-            onChange={(e) => setter("interval", Number(e.target.value) * 60)}
+            value={defaultInterval / 60} // Display in minutes for input
+            onChange={(e) => {
+              const newValue = Number(e.target.value);
+              setter("defaultInterval", newValue * 60); // Convert minutes back to seconds when setting
+            }}
             className="w-16"
           />
         </div>
@@ -88,14 +99,16 @@ function WorkSessionTimer() {
             min={1}
             max={60}
             step={1}
-            value={[breakTime / 60]}
-            onValueChange={(value) => setter("breakTime", value[0] * 60)}
+            value={[defaultBreakTime / 60]}
+            onValueChange={(value) => setter("defaultBreakTime", value[0] * 60)}
             className="flex-grow"
           />
           <Input
             type="number"
-            value={breakTime / 60}
-            onChange={(e) => setter("breakTime", Number(e.target.value) * 60)}
+            value={defaultBreakTime / 60}
+            onChange={(e) =>
+              setter("defaultBreakTime", Number(e.target.value) * 60)
+            }
             className="w-16"
           />
         </div>
@@ -105,7 +118,9 @@ function WorkSessionTimer() {
         <Switch
           id="notifications"
           checked={notifications}
-          onCheckedChange={setNotifications}
+          onCheckedChange={() => {
+            enableWebNotifications();
+          }}
         />
         <div className="flex items-center space-x-2">
           <Bell className="w-5 h-5" />

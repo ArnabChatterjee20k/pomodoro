@@ -1,6 +1,7 @@
+import { showNotification } from "@/lib/utils";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { persist, createJSONStorage } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 
 export interface ITimer {
   interval: number;
@@ -8,7 +9,9 @@ export interface ITimer {
 }
 
 interface IStore extends ITimer {
-  setter: (target: keyof ITimer, value: number | SetterFunction) => void;
+  defaultInterval: number; // New field for default interval
+  defaultBreakTime: number; // New field for default break time
+  setter: (target: string, value: number | SetterFunction) => void;
   reset: (target: keyof ITimer) => void;
   isRunning: Record<keyof ITimer, boolean>;
   startTimer: (target: keyof ITimer) => void;
@@ -20,9 +23,12 @@ type SetterFunction = (prevValue: number) => number;
 const localdata = localStorage.getItem("TimeStore");
 const storage = localdata ? JSON.parse(localdata) : {};
 
+export const defaultInterval = storage?.state?.defaultInterval || 60 * 60; // 1 hour default
+export const defaultBreakTime = storage?.state?.defaultBreakTime || 25 * 60; // 25 minutes default
+
 export const defaultTimer: ITimer = {
-  interval: storage["state"]["interval"] || 60 * 60, // 1 hour
-  breakTime: storage["state"]["breakTime"] || 25 * 60, // 25 minutes
+  interval: storage?.state?.interval || defaultInterval,
+  breakTime: storage?.state?.breakTime || defaultBreakTime,
 };
 
 export const useTimeStore = create<IStore>()(
@@ -33,9 +39,11 @@ export const useTimeStore = create<IStore>()(
 
         return {
           ...defaultTimer,
+          defaultInterval, // Assigning the defaultInterval
+          defaultBreakTime, // Assigning the defaultBreakTime
           isRunning: { interval: false, breakTime: false },
 
-          setter: (target: keyof ITimer, value: number | SetterFunction) =>
+          setter: (target: string, value: number | SetterFunction) =>
             set((state) => {
               const currentValue = state[target];
               const newValue =
@@ -52,13 +60,14 @@ export const useTimeStore = create<IStore>()(
           reset: (target: keyof ITimer) =>
             set((state) => ({
               ...state,
-              [target]: defaultTimer[target],
+              [target]:
+                target === "interval" ? defaultInterval : defaultBreakTime,
             })),
 
           startTimer: (target: keyof ITimer) => {
             const isRunning = get().isRunning[target];
             if (!isRunning) {
-              Object.entries(intervalIds).map(([targetKey, intervalId]) => {
+              Object.entries(intervalIds).forEach(([targetKey, intervalId]) => {
                 if (target !== targetKey)
                   get().pauseTimer(targetKey as keyof ITimer);
               });
@@ -74,6 +83,8 @@ export const useTimeStore = create<IStore>()(
                 get().setter(target, (prevValue) => {
                   if (prevValue > 0) return prevValue - 1;
                   get().pauseTimer(target);
+                  get().resetTimer(target);
+                  showNotification(`${target} is completed`);
                   return 0;
                 });
               }, 1000);
@@ -99,11 +110,12 @@ export const useTimeStore = create<IStore>()(
 
           resetTimer: (target: keyof ITimer) => {
             get().pauseTimer(target);
-            const storage = JSON.parse(localStorage.getItem("TimeStore") || "");
             set((state) => ({
               ...state,
-              [target]: defaultTimer[target],
-              ...storage.state,
+              [target]:
+                target === "interval"
+                  ? get().defaultInterval
+                  : get().defaultBreakTime,
             }));
           },
         };

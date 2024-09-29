@@ -30,13 +30,14 @@ export function enableWebNotifications() {
     Notification.requestPermission().then((permission) => {
       if (permission === "granted") {
         showNotification("Web Notifications enabled successfully!");
+        window.location.reload();
       } else {
         console.log("User denied notification permission.");
       }
     });
   }
 }
-function showNotification(message) {
+export function showNotification(message) {
   const notification = new Notification("Notification", {
     body: message,
   });
