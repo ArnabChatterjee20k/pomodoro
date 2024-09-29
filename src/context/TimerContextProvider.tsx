@@ -6,8 +6,8 @@ interface ITimer {
 }
 
 const defaultTimer: ITimer = {
-  interval: 300*60,
-  breakTime: 5*60,
+  interval: 60 * 60,
+  breakTime: 25 * 60,
 };
 
 const TimerContext = createContext<ITimer | null>(null);
@@ -17,7 +17,9 @@ export default function TimerContextProvider({ children }: PropsWithChildren) {
   const [intervalTime, setIntervalTime] = useState(defaultTimer.interval);
   const [breakTime, setBreakTime] = useState(defaultTimer.breakTime);
   return (
-    <TimerContext.Provider value={{ interval: intervalTime, breakTime: breakTime }}>
+    <TimerContext.Provider
+      value={{ interval: intervalTime, breakTime: breakTime }}
+    >
       {children}
     </TimerContext.Provider>
   );
